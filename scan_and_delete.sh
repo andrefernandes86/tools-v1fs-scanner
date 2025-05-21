@@ -1,4 +1,6 @@
+
 #!/bin/sh
+# With Recursive Scan
 
 export SCAN_PATH=/mnt/scan
 export NFS_SERVER=192.168.200.200
@@ -17,20 +19,25 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-echo "[$TIMESTAMP] 🔍 Running TMFS scan on $SCAN_PATH..." | tee -a $LOG_FILE
-tmfs scan -vv dir:$SCAN_PATH \
-  --endpoint antimalware.us-1.cloudone.trendmicro.com:443 \
-  -t "owner=Gandalf" \
-  -t "stack=v1fs,schedulescan" > $SCAN_JSON
+echo "[$TIMESTAMP] 🔍 Starting recursive directory scan..." | tee -a $LOG_FILE
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🧹 Parsing and deleting malicious files..." | tee -a $LOG_FILE
-jq -r '.scanResults[] | select(.scanResult==1) | .fileName' "$SCAN_JSON" | while read -r file; do
-  if [ -f "$file" ]; then
-    echo "Deleting: $file" | tee -a $LOG_FILE
-    rm -f "$file" && echo "✅ Deleted: $file" | tee -a $LOG_FILE
-  else
-    echo "⚠️ Not found: $file" | tee -a $LOG_FILE
-  fi
+# Loop through all subdirectories and the base path itself
+find "$SCAN_PATH" -type d | while IFS= read -r dir; do
+  echo "[+] Scanning directory: $dir" | tee -a $LOG_FILE
+  tmfs scan -vv dir:"$dir" \
+    --endpoint antimalware.us-1.cloudone.trendmicro.com:443 \
+    -t "owner=Gandalf" \
+    -t "stack=v1fs,schedulescan" > "$SCAN_JSON"
+
+  echo "[*] Parsing results from: $dir" | tee -a $LOG_FILE
+  jq -r '.scanResults[] | select(.scanResult==1) | .fileName' "$SCAN_JSON" | while read -r file; do
+    if [ -f "$file" ]; then
+      echo "Deleting: $file" | tee -a $LOG_FILE
+      rm -f "$file" && echo "✅ Deleted: $file" | tee -a $LOG_FILE
+    else
+      echo "⚠️ Not found: $file" | tee -a $LOG_FILE
+    fi
+  done
 done
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Scan and cleanup complete." | tee -a $LOG_FILE
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Full recursive scan and cleanup complete." | tee -a $LOG_FILE
