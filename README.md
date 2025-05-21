@@ -1,6 +1,6 @@
 # 🧹 V1FS Cleaner with NFS Integration
 
-This Docker container runs the [Trend Micro File Security (TMFS) CLI](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-deploying-cli) to scan files located on an NFS share and automatically delete any file identified as malicious.
+This Docker container runs the [Trend Micro Vision One File Security (TMFS) CLI](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-deploying-cli) to scan files located on an NFS share and automatically delete any file identified as malicious.
 
 > ⚠️ **Warning:** This container runs in `--privileged` mode and mounts an NFS share from inside the container. Use it in secure environments only.
 
