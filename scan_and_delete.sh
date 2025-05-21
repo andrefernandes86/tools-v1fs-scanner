@@ -1,8 +1,9 @@
 #!/bin/sh
 TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
 echo "[$TIMESTAMP] Mounting NFS share..." >> $LOG_FILE
+
 mkdir -p $SCAN_PATH
-mount -t nfs $NFS_SERVER:$NFS_SHARE $SCAN_PATH
+mount -o nolock -t nfs $NFS_SERVER:$NFS_SHARE $SCAN_PATH
 if [ $? -ne 0 ]; then
   echo "[$TIMESTAMP] Failed to mount NFS share." >> $LOG_FILE
   exit 1
