@@ -1,18 +1,20 @@
-# 🧹 V1FS Cleaner with NFS Integration
 
-This Docker container runs the [Trend Micro Vision One File Security (TMFS) CLI](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-deploying-cli) to scan files located on an NFS share and automatically delete any file identified as malicious.
+# 🧹 Trend Micro Vision One File Security – NFS Malware Cleaner
 
-> ⚠️ **Warning:** This container runs in `--privileged` mode and mounts an NFS share from inside the container. Use it in secure environments only.
+This Docker container uses the **Trend Micro Vision One File Security CLI** to scan files stored in an NFS share and automatically delete any file identified as malicious.
+
+> ⚠️ This container mounts an NFS share from inside using `--privileged`. Use only in secure, trusted environments.
 
 ---
 
 ## 🔧 What It Does
 
 - Mounts a remote NFS share from inside the container
-- Scans the mounted directory using TMFS CLI
-- Parses scan results (`scanResults[].fileName`)
-- Deletes files flagged as malicious (`scanResult == 1`)
-- Logs actions and errors to `/tmp/deletion_log.txt`
+- Scans the mounted directory using Trend Micro Vision One File Security CLI
+- Shows real-time scan output
+- Parses scan results to find malicious files
+- Deletes those malicious files
+- Logs actions and results
 
 ---
 
@@ -20,18 +22,18 @@ This Docker container runs the [Trend Micro Vision One File Security (TMFS) CLI]
 
 | Variable         | Description                                           | Default                               |
 |------------------|-------------------------------------------------------|---------------------------------------|
-| `TMFS_API_KEY`   | Trend Micro Vision One API Key                       | Injected at build time (`--build-arg`) |
-| `NFS_SERVER`     | IP address of the NFS server                         | `192.168.200.200`                     |
-| `NFS_SHARE`      | Exported path from the NFS server                    | `/mnt/nas/malicious-files`           |
-| `SCAN_PATH`      | Mount point inside the container                     | `/mnt/scan`                           |
-| `LOG_FILE`       | Path to the operation log                            | `/tmp/deletion_log.txt`              |
-| `SCAN_LOG`       | TMFS scan result output (JSON)                       | `/tmp/scan_result.json`              |
+| `TMFS_API_KEY`   | Vision One API Key                                    | Injected at build time                |
+| `NFS_SERVER`     | IP address of the NFS server                          | `192.168.200.200`                     |
+| `NFS_SHARE`      | Exported NFS directory                                | `/mnt/nas/malicious-files`           |
+| `SCAN_PATH`      | Mount point inside the container                      | `/mnt/scan`                           |
+| `LOG_FILE`       | Path to deletion log                                  | `/tmp/deletion_log.txt`              |
+| `SCAN_OUTPUT`    | Output from TMFS scan                                 | `/tmp/scan_output.txt`               |
 
 ---
 
-## 🚀 How to Build
+## 🛠️ Build Instructions
 
-Clone the repo and build the Docker image with your API key:
+Clone this repository and build the image using your API key:
 
 ```bash
 docker build \
@@ -41,83 +43,48 @@ docker build \
 
 ---
 
-## 🏃 How to Run
+## 🚀 How to Run
 
-The container must be run with `--privileged` to mount the NFS share:
+Run the container with `--privileged` to allow in-container NFS mounting:
 
 ```bash
 docker run --rm --privileged tmfs-cleaner-nfs
 ```
 
-This will:
-- Mount the NFS share at `/mnt/scan`
-- Run the scan
-- Delete any flagged files
-- Log actions and exit
+---
+
+## 📝 What You'll See
+
+Example output:
+
+```log
+[2025-05-21 16:00:00] Mounting NFS share 192.168.200.200:/mnt/nas/malicious-files to /mnt/scan...
+[2025-05-21 16:00:01] Running TMFS scan on /mnt/scan...
+Scanning: /mnt/scan/js_crypto_miner.html
+Malicious: /mnt/scan/js_crypto_miner.html
+Deleted: /mnt/scan/js_crypto_miner.html
+Scan complete.
+```
+
+All actions and scan results are logged to `/tmp/deletion_log.txt`.
 
 ---
 
-## 📝 Example Log Output
+## ✅ Best Practice (Alternative)
 
-Here’s what you'll see inside `/tmp/deletion_log.txt`:
+Mount the NFS share on the host and pass it into the container:
 
-```
-[2025-05-21 10:00:00] Mounting NFS share...
-[2025-05-21 10:00:01] Starting TMFS scan...
-[2025-05-21 10:00:03] Deleted: ./test/eicar-alpine.tar
-[2025-05-21 10:00:03] Scan-and-delete cycle complete.
-```
+```bash
+sudo mount -t nfs -o nolock 192.168.200.200:/mnt/nas/malicious-files /mnt/scan
 
----
-
-## 🧠 How It Works
-
-TMFS outputs results like this:
-
-```json
-{
-  "scanResults": [
-    {
-      "fileName": "./test/eicar-alpine.tar",
-      "scanResult": 1
-    }
-  ]
-}
+docker run --rm -v /mnt/scan:/mnt/scan tmfs-cleaner-nfs
 ```
 
-This tool deletes any file where `scanResult == 1`.
-
----
-
-## 🔐 Security Notes
-
-- **This container deletes files. Use in production only if you're confident in your policies.**
-- The API key is baked into the image. For better security:
-  - Use Docker secrets
-  - Mount credentials at runtime
-  - Or refactor to use environment variables instead of `--build-arg`
-
----
-
-## 📅 Scheduling
-
-To schedule recurring scans, use your host system’s cron:
-
-```cron
-*/83 * * * * docker run --rm --privileged tmfs-cleaner-nfs
-```
-
-This example runs every 83 minutes (1h23m).
+This avoids requiring `--privileged`.
 
 ---
 
 ## 👤 Maintainer
 
-Built for environments where **Gandalf** is the data owner.  
-Author: [Your Name]
-
----
-
-## 📜 License
-
-This project is open source. You can choose a license that fits your needs (MIT, Apache 2.0, etc).
+Built for secure environments where automated malware cleanup is required.  
+Owner: **Gandalf** 🧙‍♂️  
