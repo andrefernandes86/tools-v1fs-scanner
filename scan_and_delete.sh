@@ -2,6 +2,7 @@
 
 TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
 echo "[$TIMESTAMP] Mounting NFS share..."
+mkdir /mnt/scan
 
 mkdir -p $SCAN_PATH
 mount -o nolock -t nfs $NFS_SERVER:$NFS_SHARE $SCAN_PATH
