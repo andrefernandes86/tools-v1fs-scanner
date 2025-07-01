@@ -1,10 +1,9 @@
-
 #!/bin/sh
 # With Recursive Scan
 
 export SCAN_PATH=/mnt/scan
-export NFS_SERVER=192.168.200.200
-export NFS_SHARE=/mnt/nas/malicious-files
+export NFS_SERVER=192.168.200.10
+export NFS_SHARE=/mnt/nfs_share
 export LOG_FILE=/tmp/deletion_log.txt
 export SCAN_JSON=/tmp/scan_result.json
 
