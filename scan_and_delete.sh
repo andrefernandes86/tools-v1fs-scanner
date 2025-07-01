@@ -29,6 +29,23 @@ initialize_scan() {
     return 1
   fi
 
+  # Debug NFS mount permissions
+  echo "[$TIMESTAMP] 🔍 Debugging NFS mount permissions..." | tee -a $LOG_FILE
+  echo "[$TIMESTAMP] Current user: $(whoami)" | tee -a $LOG_FILE
+  echo "[$TIMESTAMP] Current user ID: $(id)" | tee -a $LOG_FILE
+  echo "[$TIMESTAMP] NFS mount info: $(mount | grep $SCAN_PATH)" | tee -a $LOG_FILE
+  echo "[$TIMESTAMP] NFS mount permissions: $(ls -ld $SCAN_PATH)" | tee -a $LOG_FILE
+  
+  # Test write permissions
+  local test_file="$SCAN_PATH/.test_write_$(date +%s)"
+  if touch "$test_file" 2>/dev/null; then
+    echo "[$TIMESTAMP] ✅ Write permissions confirmed on NFS mount" | tee -a $LOG_FILE
+    rm -f "$test_file"
+  else
+    echo "[$TIMESTAMP] ❌ WARNING: No write permissions on NFS mount!" | tee -a $LOG_FILE
+    echo "[$TIMESTAMP] This will prevent file deletion from working properly." | tee -a $LOG_FILE
+  fi
+
   # Create quarantine directory
   echo "[$TIMESTAMP] Creating quarantine directory..."
   mkdir -p "$QUARANTINE_DIR"
@@ -86,7 +103,11 @@ quarantine_file() {
     # Try multiple deletion methods to ensure original file is removed
     local delete_success=false
     
-    # Method 1: Standard rm
+    # Method 1: Try to fix permissions first, then standard rm
+    echo "🔧 Attempting to fix file permissions: $file" | tee -a $LOG_FILE
+    chmod 666 "$file" 2>/dev/null
+    chown root:root "$file" 2>/dev/null
+    
     if rm -f "$file" 2>/dev/null; then
       delete_success=true
       echo "✅ Original file deleted: $file" | tee -a $LOG_FILE
@@ -95,13 +116,17 @@ quarantine_file() {
     fi
     
     # Method 2: Force delete with different permissions
-    if [ "$delete_success" = "false" ] && rm -f "$file" 2>/dev/null; then
-      delete_success=true
-      echo "✅ Force deleted: $file" | tee -a $LOG_FILE
+    if [ "$delete_success" = "false" ]; then
+      echo "🔧 Trying force delete: $file" | tee -a $LOG_FILE
+      if rm -f "$file" 2>/dev/null; then
+        delete_success=true
+        echo "✅ Force deleted: $file" | tee -a $LOG_FILE
+      fi
     fi
     
     # Method 3: Use shred for secure deletion
     if [ "$delete_success" = "false" ] && command -v shred >/dev/null 2>&1; then
+      echo "🔧 Trying secure shred: $file" | tee -a $LOG_FILE
       if shred -u "$file" 2>/dev/null; then
         delete_success=true
         echo "✅ Securely shredded: $file" | tee -a $LOG_FILE
@@ -110,15 +135,26 @@ quarantine_file() {
     
     # Method 4: Try to overwrite and delete
     if [ "$delete_success" = "false" ]; then
+      echo "🔧 Trying overwrite and delete: $file" | tee -a $LOG_FILE
       if echo "" > "$file" 2>/dev/null && rm -f "$file" 2>/dev/null; then
         delete_success=true
         echo "✅ Overwritten and deleted: $file" | tee -a $LOG_FILE
       fi
     fi
     
+    # Method 5: Try using unlink
+    if [ "$delete_success" = "false" ]; then
+      echo "🔧 Trying unlink: $file" | tee -a $LOG_FILE
+      if unlink "$file" 2>/dev/null; then
+        delete_success=true
+        echo "✅ Unlinked: $file" | tee -a $LOG_FILE
+      fi
+    fi
+    
     if [ "$delete_success" = "false" ]; then
       echo "❌ WARNING: Could not delete original file: $file" | tee -a $LOG_FILE
       echo "   File is quarantined but original remains - manual cleanup may be needed" | tee -a $LOG_FILE
+      echo "   File permissions: $(ls -la "$file" 2>/dev/null || echo 'N/A')" | tee -a $LOG_FILE
     fi
     
     return 0
