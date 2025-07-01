@@ -151,10 +151,38 @@ quarantine_file() {
       fi
     fi
     
+    # Method 6: Try with different mount options (if available)
+    if [ "$delete_success" = "false" ]; then
+      echo "🔧 Trying with sync mount option: $file" | tee -a $LOG_FILE
+      # Try to force sync and then delete
+      sync 2>/dev/null
+      if rm -f "$file" 2>/dev/null; then
+        delete_success=true
+        echo "✅ Sync deleted: $file" | tee -a $LOG_FILE
+      fi
+    fi
+    
+    # Method 7: Try to rename and then delete (workaround for NFS locks)
+    if [ "$delete_success" = "false" ]; then
+      echo "🔧 Trying rename workaround: $file" | tee -a $LOG_FILE
+      local temp_name="${file}.delete_me_$(date +%s)"
+      if mv "$file" "$temp_name" 2>/dev/null; then
+        if rm -f "$temp_name" 2>/dev/null; then
+          delete_success=true
+          echo "✅ Rename-delete workaround succeeded: $file" | tee -a $LOG_FILE
+        else
+          echo "⚠️ Renamed but couldn't delete temp file: $temp_name" | tee -a $LOG_FILE
+        fi
+      fi
+    fi
+    
     if [ "$delete_success" = "false" ]; then
       echo "❌ WARNING: Could not delete original file: $file" | tee -a $LOG_FILE
       echo "   File is quarantined but original remains - manual cleanup may be needed" | tee -a $LOG_FILE
-      echo "   File permissions: $(ls -la "$file" 2>/dev/null || echo 'N/A')" | tee -a $LOG_FILE
+      echo "   File permissions: $(ls -la "$file" 2>/dev/null | awk '{print $1, $3, $4}' || echo 'N/A')" | tee -a $LOG_FILE
+      echo "   This file will be re-detected in future scans until manually removed" | tee -a $LOG_FILE
+    else
+      echo "✅ SUCCESS: File quarantined and original deleted: $file" | tee -a $LOG_FILE
     fi
     
     return 0
