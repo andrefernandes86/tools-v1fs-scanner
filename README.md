@@ -30,8 +30,8 @@ This Docker container uses the **Trend Micro Vision One File Security CLI** to c
 You need a valid **Trend Micro Vision One File Security API Key**:
 
 ```bash
-# Get your API key from Trend Micro Vision One Console
-# Go to: https://cloudone.trendmicro.com/
+# Get your API key from Trend Micro Vision One File Security Portal
+# Go to: https://portal.xdr.trendmicro.com/
 # Navigate to: File Security > API Keys
 # Create a new API key with appropriate permissions
 ```
@@ -69,7 +69,7 @@ NFS_SHARE=/exports/malware_scan
 ## 🛠️ **STEP-BY-STEP SETUP INSTRUCTIONS**
 
 ### **Step 1: Get Your API Key**
-1. Log into [Trend Micro Vision One Console](https://cloudone.trendmicro.com/)
+1. Log into [Trend Micro Vision One File Security Portal](https://portal.xdr.trendmicro.com/)
 2. Navigate to **File Security** > **API Keys**
 3. Create a new API key with **scan permissions**
 4. Copy the API key (it looks like: `eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...`)
@@ -272,7 +272,7 @@ docker kill --signal=SIGTERM tmfs-scanner
 
 **1. "Invalid token or key" Error**
 - ❌ **Problem**: API key is invalid or expired
-- ✅ **Solution**: Get a new API key from Trend Micro Vision One Console
+- ✅ **Solution**: Get a new API key from Trend Micro Vision One File Security Portal
 
 **2. "Failed to mount NFS share" Error**
 - ❌ **Problem**: NFS server is unreachable or share doesn't exist

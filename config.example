@@ -16,7 +16,7 @@
 # =============================================================================
 
 # Your Trend Micro Vision One File Security API Key
-# Get this from: https://cloudone.trendmicro.com/ > File Security > API Keys
+# Get this from: https://portal.xdr.trendmicro.com/ > File Security > API Keys
 # Example: eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJjaWQiOiJjYjM3YmU2Mi0zMzJjLTQ4NjctYWFkOC0xZDVkODE3NDYzMjYiLCJjcGlkIjoic3ZwIiwicHBpZCI6ImN1cyIsIml0IjoxNzQ3ODM5Mjg1LCJldCI6MjIyMDg3OTI4NSwiaWQiOiJjMGM0MTFiNy03ZjcxLTQzNGEtODg5MS1lYjAxYjgzZDA3YTQiLCJ0b2tlblVzZSI6ImN1c3RvbWVyIn0...
 TMFS_API_KEY=your_api_key_here
 

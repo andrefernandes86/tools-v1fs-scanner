@@ -33,7 +33,7 @@ echo ""
 echo "🔑 STEP 1: Trend Micro Vision One API Key"
 echo "-------------------------------------------"
 echo "You need a valid API key from Trend Micro Vision One File Security."
-echo "Get it from: https://cloudone.trendmicro.com/ > File Security > API Keys"
+echo "Get it from: https://portal.xdr.trendmicro.com/ > File Security > API Keys"
 echo ""
 read -p "Enter your API key: " API_KEY
 
