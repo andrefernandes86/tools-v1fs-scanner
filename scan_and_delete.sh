@@ -1,11 +1,19 @@
 #!/bin/sh
 # With Recursive Scan
 
-export SCAN_PATH=/mnt/scan
-export NFS_SERVER=192.168.200.200
-export NFS_SHARE=/mnt/nas/malicious-files
-export LOG_FILE=/tmp/deletion_log.txt
-export SCAN_JSON=/tmp/scan_result.json
+# Source config.env if present
+if [ -f /config.env ]; then
+  . /config.env
+elif [ -f ./config.env ]; then
+  . ./config.env
+fi
+
+# Use environment variables or safe defaults
+export SCAN_PATH="${SCAN_PATH:-/mnt/scan}"
+export NFS_SERVER="${NFS_SERVER:-192.168.200.200}"
+export NFS_SHARE="${NFS_SHARE:-/mnt/nas/malicious-files}"
+export LOG_FILE="${LOG_FILE:-/tmp/deletion_log.txt}"
+export SCAN_JSON="${SCAN_JSON:-/tmp/scan_result.json}"
 
 TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
 echo "[$TIMESTAMP] Creating mount point..."
