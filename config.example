@@ -1,0 +1,65 @@
+# =============================================================================
+# TREND MICRO VISION ONE FILE SECURITY - NFS MALWARE QUARANTINE
+# Configuration Template
+# =============================================================================
+#
+# ⚠️  IMPORTANT: You MUST configure these settings before using this tool!
+#
+# 1. Copy this file to 'config.env'
+# 2. Replace the placeholder values with your actual settings
+# 3. Use this file when building and running the container
+#
+# =============================================================================
+
+# =============================================================================
+# REQUIRED SETTINGS (MUST BE CONFIGURED)
+# =============================================================================
+
+# Your Trend Micro Vision One File Security API Key
+# Get this from: https://cloudone.trendmicro.com/ > File Security > API Keys
+# Example: eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJjaWQiOiJjYjM3YmU2Mi0zMzJjLTQ4NjctYWFkOC0xZDVkODE3NDYzMjYiLCJjcGlkIjoic3ZwIiwicHBpZCI6ImN1cyIsIml0IjoxNzQ3ODM5Mjg1LCJldCI6MjIyMDg3OTI4NSwiaWQiOiJjMGM0MTFiNy03ZjcxLTQzNGEtODg5MS1lYjAxYjgzZDA3YTQiLCJ0b2tlblVzZSI6ImN1c3RvbWVyIn0...
+TMFS_API_KEY=your_api_key_here
+
+# NFS Server IP Address
+# The IP address of your NFS server
+# Example: 192.168.1.100
+NFS_SERVER=your_nfs_server_ip_here
+
+# NFS Share Path
+# The exported directory path on your NFS server
+# Example: /mnt/shared_files
+NFS_SHARE=your_nfs_share_path_here
+
+# =============================================================================
+# OPTIONAL SETTINGS (Can be left as default)
+# =============================================================================
+
+# Scan Interval (seconds)
+# How often to perform scans (default: 30 seconds)
+SCAN_INTERVAL=30
+
+# Container Mount Point
+# Where the NFS share is mounted inside the container (default: /mnt/scan)
+SCAN_PATH=/mnt/scan
+
+# Quarantine Directory
+# Where quarantined files are stored (default: /mnt/scan/quarantine)
+QUARANTINE_DIR=/mnt/scan/quarantine
+
+# =============================================================================
+# USAGE INSTRUCTIONS
+# =============================================================================
+#
+# 1. Copy this file and rename it:
+#    cp config.example config.env
+#
+# 2. Edit the file with your settings:
+#    nano config.env
+#
+# 3. Build the Docker image:
+#    docker build --build-arg TMFS_API_KEY=$(grep TMFS_API_KEY config.env | cut -d'=' -f2) -t tmfs-cleaner-nfs .
+#
+# 4. Run the container:
+#    docker run --rm --privileged --env-file config.env tmfs-cleaner-nfs
+#
+# ============================================================================= 

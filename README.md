@@ -22,45 +22,141 @@ This Docker container uses the **Trend Micro Vision One File Security CLI** to c
 
 ---
 
-## 📁 Default Configuration
+## ⚙️ **REQUIRED CONFIGURATION**
 
-| Variable         | Description                                           | Default                               |
-|------------------|-------------------------------------------------------|---------------------------------------|
-| `TMFS_API_KEY`   | Vision One API Key                                    | Injected at build time                |
-| `NFS_SERVER`     | IP address of the NFS server                          | `192.168.200.10`                      |
-| `NFS_SHARE`      | Exported NFS directory                                | `/mnt/nfs_share`                      |
-| `SCAN_PATH`      | Mount point inside the container                      | `/mnt/scan`                           |
-| `QUARANTINE_DIR` | Quarantine directory                                  | `/mnt/scan/quarantine`                |
-| `SCAN_INTERVAL`  | Scan interval in seconds                              | `30`                                  |
-| `LOG_FILE`       | Path to quarantine log                                | `/tmp/deletion_log.txt`              |
-| `SCAN_JSON`      | Output from TMFS scan                                 | `/tmp/scan_result.json`              |
+**⚠️ IMPORTANT: You MUST configure these settings before using this tool!**
+
+### **1. API Key Configuration**
+You need a valid **Trend Micro Vision One File Security API Key**:
+
+```bash
+# Get your API key from Trend Micro Vision One Console
+# Go to: https://cloudone.trendmicro.com/
+# Navigate to: File Security > API Keys
+# Create a new API key with appropriate permissions
+```
+
+### **2. NFS Share Configuration**
+You need to specify your **NFS server and share path**:
+
+```bash
+# Example NFS configurations:
+NFS_SERVER=192.168.1.100
+NFS_SHARE=/mnt/shared_files
+
+# Or for a different setup:
+NFS_SERVER=10.0.0.50
+NFS_SHARE=/exports/malware_scan
+```
 
 ---
 
-## 🛠️ Build Instructions
+## 📁 Default Configuration
 
-Clone this repository and build the image using your API key:
+| Variable         | Description                                           | Default                               | **Required?** |
+|------------------|-------------------------------------------------------|---------------------------------------|---------------|
+| `TMFS_API_KEY`   | **Vision One API Key**                                | **MUST BE PROVIDED**                  | **YES**       |
+| `NFS_SERVER`     | **IP address of the NFS server**                      | `192.168.200.10`                      | **YES**       |
+| `NFS_SHARE`      | **Exported NFS directory**                            | `/mnt/nfs_share`                      | **YES**       |
+| `SCAN_PATH`      | Mount point inside the container                      | `/mnt/scan`                           | No            |
+| `QUARANTINE_DIR` | Quarantine directory                                  | `/mnt/scan/quarantine`                | No            |
+| `SCAN_INTERVAL`  | Scan interval in seconds                              | `30`                                  | No            |
+| `LOG_FILE`       | Path to quarantine log                                | `/tmp/deletion_log.txt`              | No            |
+| `SCAN_JSON`      | Output from TMFS scan                                 | `/tmp/scan_result.json`              | No            |
 
+---
+
+## 🛠️ **STEP-BY-STEP SETUP INSTRUCTIONS**
+
+### **Step 1: Get Your API Key**
+1. Log into [Trend Micro Vision One Console](https://cloudone.trendmicro.com/)
+2. Navigate to **File Security** > **API Keys**
+3. Create a new API key with **scan permissions**
+4. Copy the API key (it looks like: `eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...`)
+
+### **Step 2: Configure Your NFS Share**
+1. **Identify your NFS server IP address**
+2. **Identify your NFS share path**
+3. **Test NFS connectivity**:
+   ```bash
+   # Test if you can mount the NFS share
+   sudo mount -t nfs -o nolock YOUR_NFS_SERVER:YOUR_NFS_SHARE /mnt/test
+   ls /mnt/test
+   sudo umount /mnt/test
+   ```
+
+### **Step 3: Update Configuration Files**
+
+**Option A: Edit the files directly**
+```bash
+# Edit scan_and_delete.sh
+nano scan_and_delete.sh
+
+# Change these lines:
+export NFS_SERVER=YOUR_NFS_SERVER_IP
+export NFS_SHARE=YOUR_NFS_SHARE_PATH
+```
+
+**Option B: Use environment variables (recommended)**
+```bash
+# Create a .env file
+cat > .env << EOF
+NFS_SERVER=192.168.1.100
+NFS_SHARE=/mnt/shared_files
+EOF
+```
+
+### **Step 4: Build with Your API Key**
 ```bash
 docker build \
-  --build-arg TMFS_API_KEY=your_real_api_key \
+  --build-arg TMFS_API_KEY=your_actual_api_key_here \
   -t tmfs-cleaner-nfs .
 ```
 
 ---
 
-## 🚀 How to Run
+## 🚀 **USAGE EXAMPLES**
 
-Run the container with `--privileged` to allow in-container NFS mounting:
-
+### **Example 1: Basic Usage**
 ```bash
+# Build with your API key
+docker build \
+  --build-arg TMFS_API_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9... \
+  -t tmfs-cleaner-nfs .
+
+# Run the container
 docker run --rm --privileged tmfs-cleaner-nfs
 ```
 
-For continuous operation in production, run in detached mode:
-
+### **Example 2: Custom NFS Configuration**
 ```bash
-docker run -d --privileged --name tmfs-scanner tmfs-cleaner-nfs
+# Build the image
+docker build \
+  --build-arg TMFS_API_KEY=your_api_key_here \
+  -t tmfs-cleaner-nfs .
+
+# Run with custom NFS settings
+docker run --rm --privileged \
+  -e NFS_SERVER=10.0.0.50 \
+  -e NFS_SHARE=/exports/malware_scan \
+  tmfs-cleaner-nfs
+```
+
+### **Example 3: Production Deployment**
+```bash
+# Build for production
+docker build \
+  --build-arg TMFS_API_KEY=your_production_api_key \
+  -t tmfs-cleaner-nfs:latest .
+
+# Run in detached mode for continuous operation
+docker run -d \
+  --privileged \
+  --name tmfs-scanner \
+  --restart unless-stopped \
+  -e NFS_SERVER=192.168.1.100 \
+  -e NFS_SHARE=/mnt/shared_files \
+  tmfs-cleaner-nfs:latest
 ```
 
 ---
@@ -142,8 +238,10 @@ To recover a quarantined file:
 Mount the NFS share on the host and pass it into the container:
 
 ```bash
-sudo mount -t nfs -o nolock 192.168.200.10:/mnt/nfs_share /mnt/scan
+# Mount your NFS share
+sudo mount -t nfs -o nolock YOUR_NFS_SERVER:YOUR_NFS_SHARE /mnt/scan
 
+# Run without privileged mode
 docker run --rm -v /mnt/scan:/mnt/scan tmfs-cleaner-nfs
 ```
 
@@ -164,6 +262,40 @@ docker stop tmfs-scanner
 
 # Or send signal directly
 docker kill --signal=SIGTERM tmfs-scanner
+```
+
+---
+
+## ❌ **TROUBLESHOOTING**
+
+### **Common Issues:**
+
+**1. "Invalid token or key" Error**
+- ❌ **Problem**: API key is invalid or expired
+- ✅ **Solution**: Get a new API key from Trend Micro Vision One Console
+
+**2. "Failed to mount NFS share" Error**
+- ❌ **Problem**: NFS server is unreachable or share doesn't exist
+- ✅ **Solution**: Verify NFS server IP and share path are correct
+
+**3. "Permission denied" Errors**
+- ❌ **Problem**: NFS share permissions are too restrictive
+- ✅ **Solution**: Check NFS server permissions and user access
+
+**4. Container exits immediately**
+- ❌ **Problem**: Missing API key or NFS configuration
+- ✅ **Solution**: Ensure API key is provided and NFS settings are correct
+
+### **Testing Your Configuration:**
+```bash
+# Test NFS connectivity
+sudo mount -t nfs -o nolock YOUR_NFS_SERVER:YOUR_NFS_SHARE /mnt/test
+ls /mnt/test
+sudo umount /mnt/test
+
+# Test API key (if you have curl)
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  https://antimalware.us-1.cloudone.trendmicro.com:443/api/v1/health
 ```
 
 ---
