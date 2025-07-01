@@ -284,37 +284,26 @@ docker kill --signal=SIGTERM tmfs-scanner
 
 ---
 
-## ❌ **TROUBLESHOOTING**
+## 🛠️ TROUBLESHOOTING & FAQ
 
-### **Common Issues:**
+### NFS Share Not Visible Inside Container?
+- The NFS share is always mounted **inside the container** using the `NFS_SERVER` and `NFS_SHARE` environment variables. Do NOT use `-v` to mount the share from the host.
+- If you see scan logs like `No scan results for: ...` or directories are found but no files are detected, this usually means:
+  - The NFS export permissions are too restrictive (try `rw,sync,no_subtree_check,no_root_squash` on the server).
+  - The files/directories on the NFS share are not world-readable/executable.
+  - The container cannot reach the NFS server (check firewall and network).
+  - The NFS share is empty or not exported correctly.
 
-**1. "Invalid token or key" Error**
-- ❌ **Problem**: API key is invalid or expired
-- ✅ **Solution**: Get a new API key from Trend Micro Vision One File Security Portal
+### How to Test
+- Place a test file (e.g., `eicar.txt`) in the NFS share from any NFS client or the server itself.
+- Run the container as shown above. The file should be detected, quarantined, and deleted from its original location.
+- If not, check the logs for mount errors or permission issues.
 
-**2. "Failed to mount NFS share" Error**
-- ❌ **Problem**: NFS server is unreachable or share doesn't exist
-- ✅ **Solution**: Verify NFS server IP and share path are correct
-
-**3. "Permission denied" Errors**
-- ❌ **Problem**: NFS share permissions are too restrictive
-- ✅ **Solution**: Check NFS server permissions and user access
-
-**4. Container exits immediately**
-- ❌ **Problem**: Missing API key or NFS configuration
-- ✅ **Solution**: Ensure API key is provided and NFS settings are correct
-
-### **Testing Your Configuration:**
-```bash
-# Test NFS connectivity
-sudo mount -t nfs -o nolock YOUR_NFS_SERVER:YOUR_NFS_SHARE /mnt/test
-ls /mnt/test
-sudo umount /mnt/test
-
-# Test API key (if you have curl)
-curl -H "Authorization: Bearer YOUR_API_KEY" \
-  https://antimalware.us-1.cloudone.trendmicro.com:443/api/v1/health
-```
+### Common Pitfalls
+- **Do not use `-v` to mount the NFS share from the host.**
+- Always use the environment variables to let the container mount the NFS share itself.
+- Ensure the NFS export allows root access from the container (use `no_root_squash`).
+- If you revert or update the code, always rebuild the Docker image.
 
 ---
 
