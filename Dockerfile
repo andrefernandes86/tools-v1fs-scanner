@@ -15,8 +15,8 @@ ENV PATH="$TMFS_DIR:$PATH"
 ENV SCAN_PATH=/mnt/scan
 ENV LOG_FILE=/tmp/deletion_log.txt
 ENV SCAN_JSON=/tmp/scan_result.json
-ENV NFS_SERVER=192.168.200.10
-ENV NFS_SHARE=/mnt/nfs_share
+ENV NFS_SERVER=192.168.200.200
+ENV NFS_SHARE=/mnt/nas/malicious-files
 
 # Download and extract TMFS CLI
 RUN mkdir -p $TMFS_DIR && \
