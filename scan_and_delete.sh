@@ -1,5 +1,5 @@
 #!/bin/sh
-# Continuous Recursive Scan and Quarantine Function with Real-time Monitoring
+# Continuous Recursive Scan and Quarantine Function with Real-time Monitoring and Parallel Processing
 
 export SCAN_PATH=/mnt/scan
 export NFS_SERVER=192.168.200.10
@@ -8,6 +8,11 @@ export LOG_FILE=/tmp/deletion_log.txt
 export SCAN_JSON=/tmp/scan_result.json
 export QUARANTINE_DIR="$SCAN_PATH/quarantine"
 export SCAN_INTERVAL=30  # Scan interval in seconds
+
+# Parallel scanning configuration
+export MAX_PARALLEL_SCANS=3  # Maximum number of parallel directory scans
+export PARALLEL_DELAY=1      # Delay between parallel requests (seconds)
+export ENABLE_PARALLEL=true  # Enable/disable parallel scanning
 
 # Function to initialize the scanning environment
 initialize_scan() {
@@ -28,6 +33,14 @@ initialize_scan() {
   echo "[$TIMESTAMP] Creating quarantine directory..."
   mkdir -p "$QUARANTINE_DIR"
   chmod 755 "$QUARANTINE_DIR"
+  
+  # Display parallel scanning configuration
+  if [ "$ENABLE_PARALLEL" = "true" ]; then
+    echo "[$TIMESTAMP] ⚡ Parallel scanning enabled: Max $MAX_PARALLEL_SCANS concurrent scans" | tee -a $LOG_FILE
+    echo "[$TIMESTAMP] ⏱️  Rate limiting: $PARALLEL_DELAY second delay between parallel requests" | tee -a $LOG_FILE
+  else
+    echo "[$TIMESTAMP] 🐌 Sequential scanning enabled" | tee -a $LOG_FILE
+  fi
   
   echo "[$TIMESTAMP] ✅ Initialization complete. Starting continuous monitoring..." | tee -a $LOG_FILE
   return 0
@@ -71,67 +84,155 @@ quarantine_file() {
 scan_directory() {
   local dir="$1"
   local scan_count="$2"
+  local process_id="$3"
   
-  # Skip the quarantine directory itself
-  if [ "$dir" = "$QUARANTINE_DIR" ]; then
+  # Skip the quarantine directory itself - CRITICAL EXCLUSION
+  if [ "$dir" = "$QUARANTINE_DIR" ] || [[ "$dir" == "$QUARANTINE_DIR"/* ]]; then
+    echo "[Scan #$scan_count][PID:$process_id] 🚫 Skipping quarantine directory: $dir" | tee -a $LOG_FILE
     return 0
   fi
   
-  echo "[Scan #$scan_count] [+] Scanning directory: $dir" | tee -a $LOG_FILE
+  echo "[Scan #$scan_count][PID:$process_id] [+] Scanning directory: $dir" | tee -a $LOG_FILE
+  
+  # Create unique scan result file for parallel processing
+  local scan_result_file="/tmp/scan_result_${process_id}.json"
   
   # Perform the scan
   tmfs scan -vv dir:"$dir" \
     --endpoint antimalware.us-1.cloudone.trendmicro.com:443 \
     -t "owner=Gandalf" \
-    -t "stack=v1fs,realtime" > "$SCAN_JSON" 2>/dev/null
+    -t "stack=v1fs,realtime" > "$scan_result_file" 2>/dev/null
 
   # Check if scan was successful
-  if [ ! -s "$SCAN_JSON" ]; then
-    echo "[Scan #$scan_count] ⚠️ No scan results for: $dir" | tee -a $LOG_FILE
+  if [ ! -s "$scan_result_file" ]; then
+    echo "[Scan #$scan_count][PID:$process_id] ⚠️ No scan results for: $dir" | tee -a $LOG_FILE
+    rm -f "$scan_result_file" 2>/dev/null
     return 0
   fi
 
-  echo "[Scan #$scan_count] [*] Parsing results from: $dir" | tee -a $LOG_FILE
+  echo "[Scan #$scan_count][PID:$process_id] [*] Parsing results from: $dir" | tee -a $LOG_FILE
   
   # Parse and process malicious files
   local malicious_count=0
-  jq -r '.scanResults[] | select(.scanResult==1) | .fileName' "$SCAN_JSON" 2>/dev/null | while read -r file; do
+  jq -r '.scanResults[] | select(.scanResult==1) | .fileName' "$scan_result_file" 2>/dev/null | while read -r file; do
     if [ -n "$file" ] && [ -f "$file" ]; then
-      echo "[Scan #$scan_count] 🚨 Malicious file detected: $file" | tee -a $LOG_FILE
+      echo "[Scan #$scan_count][PID:$process_id] 🚨 Malicious file detected: $file" | tee -a $LOG_FILE
       quarantine_file "$file"
       malicious_count=$((malicious_count + 1))
     elif [ -n "$file" ]; then
-      echo "[Scan #$scan_count] ⚠️ File not found: $file" | tee -a $LOG_FILE
+      echo "[Scan #$scan_count][PID:$process_id] ⚠️ File not found: $file" | tee -a $LOG_FILE
     fi
   done
   
   if [ $malicious_count -gt 0 ]; then
-    echo "[Scan #$scan_count] 🎯 Found and quarantined $malicious_count malicious file(s) in: $dir" | tee -a $LOG_FILE
+    echo "[Scan #$scan_count][PID:$process_id] 🎯 Found and quarantined $malicious_count malicious file(s) in: $dir" | tee -a $LOG_FILE
   fi
+  
+  # Clean up temporary scan result file
+  rm -f "$scan_result_file" 2>/dev/null
 }
 
-# Function to perform complete recursive scan
-perform_recursive_scan() {
+# Function to perform parallel recursive scan
+perform_parallel_recursive_scan() {
   local scan_count="$1"
   local TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
   
-  echo "[$TIMESTAMP] 🔍 [Scan #$scan_count] Starting recursive directory scan..." | tee -a $LOG_FILE
+  echo "[$TIMESTAMP] 🔍 [Scan #$scan_count] Starting parallel recursive directory scan..." | tee -a $LOG_FILE
   
-  # Get all directories recursively, including the root
+  # Get all directories recursively, excluding quarantine
+  local directories=()
+  local total_dirs=0
+  local scanned_dirs=0
+  local current_jobs=0
+  local max_parallel=$MAX_PARALLEL_SCANS
+  
+  # Collect directories to scan (excluding quarantine)
+  while IFS= read -r dir; do
+    # Skip quarantine directory and its subdirectories
+    if [ "$dir" != "$QUARANTINE_DIR" ] && [[ "$dir" != "$QUARANTINE_DIR"/* ]]; then
+      directories+=("$dir")
+    fi
+  done < <(find "$SCAN_PATH" -type d)
+  
+  total_dirs=${#directories[@]}
+  echo "[Scan #$scan_count] 📊 Found $total_dirs directories to scan (excluding quarantine)" | tee -a $LOG_FILE
+  
+  # Scan directories in parallel
+  for dir in "${directories[@]}"; do
+    scanned_dirs=$((scanned_dirs + 1))
+    local process_id=$$
+    
+    # Start parallel scan
+    scan_directory "$dir" "$scan_count" "$process_id" &
+    current_jobs=$((current_jobs + 1))
+    
+    echo "[Scan #$scan_count] 🚀 Started parallel scan $current_jobs/$total_dirs: $dir" | tee -a $LOG_FILE
+    
+    # Limit parallel processes and add rate limiting
+    if [ $current_jobs -ge $max_parallel ]; then
+      echo "[Scan #$scan_count] ⏸️  Waiting for parallel scans to complete ($current_jobs active)..." | tee -a $LOG_FILE
+      wait  # Wait for all background jobs
+      current_jobs=0
+      
+      # Rate limiting delay
+      if [ $PARALLEL_DELAY -gt 0 ]; then
+        echo "[Scan #$scan_count] ⏱️  Rate limiting: Waiting $PARALLEL_DELAY seconds..." | tee -a $LOG_FILE
+        sleep $PARALLEL_DELAY
+      fi
+    fi
+  done
+  
+  # Wait for remaining background jobs
+  if [ $current_jobs -gt 0 ]; then
+    echo "[Scan #$scan_count] ⏸️  Waiting for final $current_jobs parallel scans to complete..." | tee -a $LOG_FILE
+    wait
+  fi
+  
+  echo "[$TIMESTAMP] ✅ [Scan #$scan_count] Parallel recursive scan complete. Scanned $scanned_dirs directories." | tee -a $LOG_FILE
+}
+
+# Function to perform sequential recursive scan (fallback)
+perform_sequential_recursive_scan() {
+  local scan_count="$1"
+  local TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
+  
+  echo "[$TIMESTAMP] 🔍 [Scan #$scan_count] Starting sequential recursive directory scan..." | tee -a $LOG_FILE
+  
+  # Get all directories recursively, excluding quarantine
   local total_dirs=0
   local scanned_dirs=0
   
-  # Count total directories first
-  total_dirs=$(find "$SCAN_PATH" -type d | wc -l)
-  echo "[Scan #$scan_count] 📊 Found $total_dirs directories to scan" | tee -a $LOG_FILE
+  # Count total directories first (excluding quarantine)
+  total_dirs=$(find "$SCAN_PATH" -type d | grep -v "$QUARANTINE_DIR" | wc -l)
+  echo "[Scan #$scan_count] 📊 Found $total_dirs directories to scan (excluding quarantine)" | tee -a $LOG_FILE
   
-  # Scan each directory
-  find "$SCAN_PATH" -type d | while IFS= read -r dir; do
+  # Scan each directory sequentially
+  find "$SCAN_PATH" -type d | grep -v "$QUARANTINE_DIR" | while IFS= read -r dir; do
     scanned_dirs=$((scanned_dirs + 1))
-    scan_directory "$dir" "$scan_count"
+    scan_directory "$dir" "$scan_count" "seq"
   done
   
-  echo "[$TIMESTAMP] ✅ [Scan #$scan_count] Recursive scan complete. Scanned $scanned_dirs directories." | tee -a $LOG_FILE
+  echo "[$TIMESTAMP] ✅ [Scan #$scan_count] Sequential recursive scan complete. Scanned $scanned_dirs directories." | tee -a $LOG_FILE
+}
+
+# Function to perform complete recursive scan with fallback
+perform_recursive_scan() {
+  local scan_count="$1"
+  
+  if [ "$ENABLE_PARALLEL" = "true" ]; then
+    # Try parallel scanning first
+    echo "[Scan #$scan_count] ⚡ Attempting parallel scanning..." | tee -a $LOG_FILE
+    if perform_parallel_recursive_scan "$scan_count"; then
+      return 0
+    else
+      echo "[Scan #$scan_count] ⚠️ Parallel scanning failed, falling back to sequential..." | tee -a $LOG_FILE
+      ENABLE_PARALLEL=false  # Disable parallel for this scan cycle
+      perform_sequential_recursive_scan "$scan_count"
+    fi
+  else
+    # Use sequential scanning
+    perform_sequential_recursive_scan "$scan_count"
+  fi
 }
 
 # Function to check if NFS mount is still valid
@@ -146,6 +247,24 @@ check_mount() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ NFS share remounted successfully." | tee -a $LOG_FILE
   fi
   return 0
+}
+
+# Function to monitor system resources
+monitor_resources() {
+  local scan_count="$1"
+  local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
+  local memory_usage=$(free | grep Mem | awk '{printf "%.1f", $3/$2 * 100.0}')
+  
+  echo "[Scan #$scan_count] 📊 System Resources - CPU: ${cpu_usage}%, Memory: ${memory_usage}%" | tee -a $LOG_FILE
+  
+  # Warn if resources are high
+  if [ "${cpu_usage%.*}" -gt 80 ]; then
+    echo "[Scan #$scan_count] ⚠️ High CPU usage detected: ${cpu_usage}%" | tee -a $LOG_FILE
+  fi
+  
+  if [ "${memory_usage%.*}" -gt 80 ]; then
+    echo "[Scan #$scan_count] ⚠️ High memory usage detected: ${memory_usage}%" | tee -a $LOG_FILE
+  fi
 }
 
 # Main continuous scanning loop
@@ -167,6 +286,9 @@ main_scan_loop() {
       continue
     fi
     
+    # Monitor system resources
+    monitor_resources "$scan_count"
+    
     # Perform the recursive scan
     perform_recursive_scan "$scan_count"
     
@@ -182,6 +304,13 @@ main_scan_loop() {
 # Signal handler for graceful shutdown
 cleanup() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🛑 Received shutdown signal. Cleaning up..." | tee -a $LOG_FILE
+  
+  # Kill any remaining background processes
+  jobs -p | xargs -r kill 2>/dev/null
+  
+  # Clean up temporary scan result files
+  rm -f /tmp/scan_result_*.json 2>/dev/null
+  
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Continuous scanning stopped." | tee -a $LOG_FILE
   exit 0
 }

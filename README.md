@@ -61,6 +61,9 @@ NFS_SHARE=/exports/malware_scan
 | `SCAN_PATH`      | Mount point inside the container                      | `/mnt/scan`                           | No            |
 | `QUARANTINE_DIR` | Quarantine directory                                  | `/mnt/scan/quarantine`                | No            |
 | `SCAN_INTERVAL`  | Scan interval in seconds                              | `30`                                  | No            |
+| `ENABLE_PARALLEL`| Enable parallel directory scanning                    | `true`                                | No            |
+| `MAX_PARALLEL_SCANS` | Maximum parallel scans                            | `3`                                   | No            |
+| `PARALLEL_DELAY` | Delay between parallel requests (seconds)            | `1`                                   | No            |
 | `LOG_FILE`       | Path to quarantine log                                | `/tmp/deletion_log.txt`              | No            |
 | `SCAN_JSON`      | Output from TMFS scan                                 | `/tmp/scan_result.json`              | No            |
 
@@ -219,6 +222,20 @@ To recover a quarantined file:
 - **Scan cycle tracking**: Each scan is numbered for easy tracking
 - **Mount monitoring**: Automatically detects and remounts lost NFS connections
 
+### **⚡ Parallel Scanning (NEW):**
+- **Directory-level parallelism**: Scans multiple directories simultaneously
+- **Configurable concurrency**: Up to 3 parallel scans by default (adjustable)
+- **Rate limiting protection**: Built-in delays to prevent API throttling
+- **Automatic fallback**: Falls back to sequential scanning if parallel fails
+- **Resource monitoring**: Tracks CPU and memory usage during scans
+- **Process isolation**: Each parallel scan uses unique temporary files
+
+### **🚫 Quarantine Exclusion (NEW):**
+- **Automatic exclusion**: Quarantine directory is never scanned
+- **Subdirectory protection**: All quarantine subdirectories are excluded
+- **Performance optimization**: Reduces scan time by skipping quarantined files
+- **Prevents re-scanning**: Avoids scanning already quarantined malicious files
+
 ### **Robust Error Handling:**
 - **Graceful shutdown**: Responds to SIGTERM and SIGINT signals
 - **Mount recovery**: Automatically remounts NFS if connection is lost
@@ -230,6 +247,7 @@ To recover a quarantined file:
 - **Progress tracking**: Reports scanned directories and found malicious files
 - **Efficient parsing**: Uses jq for fast JSON parsing of scan results
 - **Error suppression**: Redirects stderr to avoid log clutter
+- **Resource monitoring**: Warns about high CPU/memory usage
 
 ---
 
