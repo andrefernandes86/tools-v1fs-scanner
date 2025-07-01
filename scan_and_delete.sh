@@ -87,7 +87,7 @@ scan_directory() {
   local process_id="$3"
   
   # Skip the quarantine directory itself - CRITICAL EXCLUSION
-  if [ "$dir" = "$QUARANTINE_DIR" ] || [[ "$dir" == "$QUARANTINE_DIR"/* ]]; then
+  if [ "$dir" = "$QUARANTINE_DIR" ] || echo "$dir" | grep -q "^$QUARANTINE_DIR/"; then
     echo "[Scan #$scan_count][PID:$process_id] 🚫 Skipping quarantine directory: $dir" | tee -a $LOG_FILE
     return 0
   fi
@@ -140,25 +140,17 @@ perform_parallel_recursive_scan() {
   echo "[$TIMESTAMP] 🔍 [Scan #$scan_count] Starting parallel recursive directory scan..." | tee -a $LOG_FILE
   
   # Get all directories recursively, excluding quarantine
-  local directories=()
   local total_dirs=0
   local scanned_dirs=0
   local current_jobs=0
   local max_parallel=$MAX_PARALLEL_SCANS
   
-  # Collect directories to scan (excluding quarantine)
-  while IFS= read -r dir; do
-    # Skip quarantine directory and its subdirectories
-    if [ "$dir" != "$QUARANTINE_DIR" ] && [[ "$dir" != "$QUARANTINE_DIR"/* ]]; then
-      directories+=("$dir")
-    fi
-  done < <(find "$SCAN_PATH" -type d)
-  
-  total_dirs=${#directories[@]}
+  # Count total directories first (excluding quarantine)
+  total_dirs=$(find "$SCAN_PATH" -type d | grep -v "$QUARANTINE_DIR" | wc -l)
   echo "[Scan #$scan_count] 📊 Found $total_dirs directories to scan (excluding quarantine)" | tee -a $LOG_FILE
   
-  # Scan directories in parallel
-  for dir in "${directories[@]}"; do
+  # Scan directories in parallel using a simpler approach
+  find "$SCAN_PATH" -type d | grep -v "$QUARANTINE_DIR" | while IFS= read -r dir; do
     scanned_dirs=$((scanned_dirs + 1))
     local process_id=$$
     
