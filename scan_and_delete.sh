@@ -59,24 +59,72 @@ quarantine_file() {
   local quarantine_name="${name_without_ext}_${timestamp}.quarantine"
   local quarantine_path="$QUARANTINE_DIR/$quarantine_name"
   
-  # Move file to quarantine
+  # Check if file still exists and is accessible
+  if [ ! -f "$file" ]; then
+    echo "⚠️ File already quarantined or removed: $file" | tee -a $LOG_FILE
+    return 0
+  fi
+  
+  # Try direct move first (most efficient)
   if mv "$file" "$quarantine_path" 2>/dev/null; then
     # Change permissions to prevent execution (read-only for owner, no access for others)
-    chmod 400 "$quarantine_path"
+    chmod 400 "$quarantine_path" 2>/dev/null
     echo "✅ Quarantined: $file -> $quarantine_path" | tee -a $LOG_FILE
     echo "   Original location: $dirname" | tee -a $LOG_FILE
     echo "   Original extension: $extension" | tee -a $LOG_FILE
-    echo "   New permissions: $(ls -la "$quarantine_path" | awk '{print $1}')" | tee -a $LOG_FILE
-  else
-    echo "❌ Failed to quarantine: $file (Permission denied or file busy)" | tee -a $LOG_FILE
-    # If move fails, try to copy and then delete
-    if cp "$file" "$quarantine_path" 2>/dev/null; then
-      chmod 400 "$quarantine_path"
-      rm -f "$file" 2>/dev/null
-      echo "✅ Copied and quarantined: $file -> $quarantine_path" | tee -a $LOG_FILE
+    echo "   New permissions: $(ls -la "$quarantine_path" 2>/dev/null | awk '{print $1}' || echo 'N/A')" | tee -a $LOG_FILE
+    return 0
+  fi
+  
+  echo "❌ Failed to move: $file (Permission denied or file busy)" | tee -a $LOG_FILE
+  
+  # Try copy and delete approach
+  if cp "$file" "$quarantine_path" 2>/dev/null; then
+    chmod 400 "$quarantine_path" 2>/dev/null
+    echo "✅ Copied to quarantine: $file -> $quarantine_path" | tee -a $LOG_FILE
+    
+    # Try multiple deletion methods to ensure original file is removed
+    local delete_success=false
+    
+    # Method 1: Standard rm
+    if rm -f "$file" 2>/dev/null; then
+      delete_success=true
+      echo "✅ Original file deleted: $file" | tee -a $LOG_FILE
     else
-      echo "❌ Failed to copy/quarantine: $file" | tee -a $LOG_FILE
+      echo "⚠️ Standard rm failed for: $file" | tee -a $LOG_FILE
     fi
+    
+    # Method 2: Force delete with different permissions
+    if [ "$delete_success" = "false" ] && rm -f "$file" 2>/dev/null; then
+      delete_success=true
+      echo "✅ Force deleted: $file" | tee -a $LOG_FILE
+    fi
+    
+    # Method 3: Use shred for secure deletion
+    if [ "$delete_success" = "false" ] && command -v shred >/dev/null 2>&1; then
+      if shred -u "$file" 2>/dev/null; then
+        delete_success=true
+        echo "✅ Securely shredded: $file" | tee -a $LOG_FILE
+      fi
+    fi
+    
+    # Method 4: Try to overwrite and delete
+    if [ "$delete_success" = "false" ]; then
+      if echo "" > "$file" 2>/dev/null && rm -f "$file" 2>/dev/null; then
+        delete_success=true
+        echo "✅ Overwritten and deleted: $file" | tee -a $LOG_FILE
+      fi
+    fi
+    
+    if [ "$delete_success" = "false" ]; then
+      echo "❌ WARNING: Could not delete original file: $file" | tee -a $LOG_FILE
+      echo "   File is quarantined but original remains - manual cleanup may be needed" | tee -a $LOG_FILE
+    fi
+    
+    return 0
+  else
+    echo "❌ Failed to copy/quarantine: $file" | tee -a $LOG_FILE
+    return 1
   fi
 }
 
@@ -126,6 +174,16 @@ scan_directory() {
   
   if [ $malicious_count -gt 0 ]; then
     echo "[Scan #$scan_count][PID:$process_id] 🎯 Found and quarantined $malicious_count malicious file(s) in: $dir" | tee -a $LOG_FILE
+    
+    # Verify that original files were actually removed from NFS share
+    echo "[Scan #$scan_count][PID:$process_id] 🔍 Verifying file removal from NFS share..." | tee -a $LOG_FILE
+    jq -r '.scanResults[] | select(.scanResult==1) | .fileName' "$scan_result_file" 2>/dev/null | while read -r file; do
+      if [ -n "$file" ] && [ -f "$file" ]; then
+        echo "[Scan #$scan_count][PID:$process_id] ⚠️ WARNING: Original file still exists: $file" | tee -a $LOG_FILE
+      else
+        echo "[Scan #$scan_count][PID:$process_id] ✅ Confirmed: Original file removed: $file" | tee -a $LOG_FILE
+      fi
+    done
   fi
   
   # Clean up temporary scan result file
